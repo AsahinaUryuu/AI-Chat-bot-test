@@ -24,25 +24,41 @@
         <button onclick="sendMessage()">发送</button>
     </div>
 
-    <script>
-        // 连接到你的 Python 后端
+ <script>
         const ws = new WebSocket("ws://127.0.0.1:8000/ws/chat");
         const statusDiv = document.getElementById('status');
         const chatBox = document.getElementById('chat-box');
+        
+        // 用一个变量记录当前 AI 的回复状态
+        let isAiTyping = false; 
 
         ws.onopen = function() {
-            statusDiv.innerHTML = "🟢 已连接 (Connected)";
+            statusDiv.innerHTML = "🟢 已连接 (流式模式)";
             statusDiv.style.color = "green";
-            addMessage("系统", "连接成功！大脑已就绪。");
+            addMessage("系统", "连接成功！流式输出已就绪。");
         };
 
         ws.onmessage = function(event) {
-            // 这里接收 AI (服务端) 发回来的消息
-            addMessage("AI", event.data, "received");
+            const text = event.data;
+            
+            // 核心逻辑：获取聊天框里最后一个气泡
+            const lastMsg = chatBox.lastElementChild;
+
+            // 如果最后一个气泡是 AI 的，并且我们认为它还在说话，就追加文字
+            if (lastMsg && lastMsg.dataset.sender === "AI" && isAiTyping) {
+                lastMsg.innerText += text;
+            } else {
+                // 否则，创建一个新气泡
+                addMessage("AI", text, "received");
+                isAiTyping = true; // 标记 AI 开始说话了
+            }
+            
+            // 滚动到底部
+            chatBox.scrollTop = chatBox.scrollHeight;
         };
 
         ws.onclose = function() {
-            statusDiv.innerHTML = "🔴 连接断开 (Disconnected)";
+            statusDiv.innerHTML = "🔴 连接断开";
             statusDiv.style.color = "red";
         };
 
@@ -50,7 +66,10 @@
             const input = document.getElementById("msgInput");
             const text = input.value;
             if (text) {
-                ws.send(text); // 发送给 Python
+                // 发送前，标记 AI 还没开始说话（或者是上一轮对话已结束）
+                isAiTyping = false; 
+                
+                ws.send(text);
                 addMessage("我", text, "sent");
                 input.value = "";
             }
@@ -59,7 +78,11 @@
         function addMessage(sender, text, type) {
             const div = document.createElement("div");
             div.className = `msg ${type}`;
-            div.innerText = `${sender}: ${text}`;
+            div.innerText = sender === "AI" || sender === "我" ? text : `${sender}: ${text}`;
+            
+            // 给 DOM 元素加个标记，方便我们识别是谁发的
+            div.dataset.sender = sender; 
+            
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
         }
