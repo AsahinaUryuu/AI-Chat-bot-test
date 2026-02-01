@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Waifu AI 测试终端</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; background: #f0f2f5; }
+        #chat-box { height: 300px; border: 1px solid #ddd; background: white; overflow-y: scroll; padding: 10px; margin-bottom: 10px; border-radius: 8px; }
+        .msg { margin: 5px 0; padding: 8px; border-radius: 5px; }
+        .sent { background-color: #dcf8c6; text-align: right; margin-left: 50px; }
+        .received { background-color: #fff; border: 1px solid #eee; margin-right: 50px; }
+        input { width: 70%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        #status { font-size: 12px; color: #666; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h2>🤖 Waifu AI 连接测试</h2>
+    <div id="status">🔴 未连接</div>
+    <div id="chat-box"></div>
+    <div style="display: flex; gap: 10px;">
+        <input type="text" id="msgInput" placeholder="对你的 AI 说点什么..." onkeypress="handleKeyPress(event)">
+        <button onclick="sendMessage()">发送</button>
+    </div>
+
+    <script>
+        // 连接到你的 Python 后端
+        const ws = new WebSocket("ws://127.0.0.1:8000/ws/chat");
+        const statusDiv = document.getElementById('status');
+        const chatBox = document.getElementById('chat-box');
+
+        ws.onopen = function() {
+            statusDiv.innerHTML = "🟢 已连接 (Connected)";
+            statusDiv.style.color = "green";
+            addMessage("系统", "连接成功！大脑已就绪。");
+        };
+
+        ws.onmessage = function(event) {
+            // 这里接收 AI (服务端) 发回来的消息
+            addMessage("AI", event.data, "received");
+        };
+
+        ws.onclose = function() {
+            statusDiv.innerHTML = "🔴 连接断开 (Disconnected)";
+            statusDiv.style.color = "red";
+        };
+
+        function sendMessage() {
+            const input = document.getElementById("msgInput");
+            const text = input.value;
+            if (text) {
+                ws.send(text); // 发送给 Python
+                addMessage("我", text, "sent");
+                input.value = "";
+            }
+        }
+
+        function addMessage(sender, text, type) {
+            const div = document.createElement("div");
+            div.className = `msg ${type}`;
+            div.innerText = `${sender}: ${text}`;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        
+        function handleKeyPress(e) {
+            if (e.key === 'Enter') sendMessage();
+        }
+    </script>
+</body>
+</html>
