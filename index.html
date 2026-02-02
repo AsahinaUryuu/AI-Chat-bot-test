@@ -2,94 +2,112 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Waifu AI 测试终端</title>
+    <title>七七 AI 对话</title>
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; background: #f0f2f5; }
-        #chat-box { height: 300px; border: 1px solid #ddd; background: white; overflow-y: scroll; padding: 10px; margin-bottom: 10px; border-radius: 8px; }
-        .msg { margin: 5px 0; padding: 8px; border-radius: 5px; }
-        .sent { background-color: #dcf8c6; text-align: right; margin-left: 50px; }
-        .received { background-color: #fff; border: 1px solid #eee; margin-right: 50px; }
-        input { width: 70%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background-color: #0056b3; }
-        #status { font-size: 12px; color: #666; margin-bottom: 10px; }
+        body { font-family: 'Microsoft YaHei', sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; background: #f4f4f9; }
+        #chat-box { height: 400px; border: 1px solid #ddd; background: white; overflow-y: scroll; padding: 15px; margin-bottom: 15px; border-radius: 10px; }
+        .msg { margin: 8px 0; padding: 10px; border-radius: 8px; max-width: 80%; }
+        .sent { background-color: #95ec69; float: right; clear: both; }
+        .received { background-color: #fff; float: left; clear: both; border: 1px solid #eee; }
+        .input-area { display: flex; gap: 10px; clear: both; padding-top: 10px; }
+        input { flex: 1; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        button { padding: 10px 20px; background: #5b6caf; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        #status { font-size: 12px; color: #666; margin-bottom: 5px; }
     </style>
 </head>
 <body>
-    <h2>🤖 Waifu AI 连接测试</h2>
+    <h2>❄️ 僵尸娘 七七</h2>
     <div id="status">🔴 未连接</div>
     <div id="chat-box"></div>
-    <div style="display: flex; gap: 10px;">
-        <input type="text" id="msgInput" placeholder="对你的 AI 说点什么..." onkeypress="handleKeyPress(event)">
+    <div class="input-area">
+        <input type="text" id="msgInput" placeholder="和七七说话..." onkeypress="handleKeyPress(event)">
         <button onclick="sendMessage()">发送</button>
     </div>
 
- <script>
+    <script>
         const ws = new WebSocket("ws://127.0.0.1:8000/ws/chat");
-        const statusDiv = document.getElementById('status');
-        const chatBox = document.getElementById('chat-box');
-        
-        // 用一个变量记录当前 AI 的回复状态
-        let isAiTyping = false; 
+        ws.binaryType = "arraybuffer"; // 【关键】接收二进制音频数据
 
-        ws.onopen = function() {
-            statusDiv.innerHTML = "🟢 已连接 (流式模式)";
-            statusDiv.style.color = "green";
-            addMessage("系统", "连接成功！流式输出已就绪。");
+        const chatBox = document.getElementById('chat-box');
+        const statusDiv = document.getElementById('status');
+        
+        // 音频播放相关
+        let audioContext = null;
+        let audioQueue = [];
+        let isPlaying = false;
+
+        ws.onopen = () => { statusDiv.innerText = "🟢 已连接"; statusDiv.style.color = "green"; };
+        ws.onclose = () => { statusDiv.innerText = "🔴 断开连接"; statusDiv.style.color = "red"; };
+
+        ws.onmessage = async (event) => {
+            const data = event.data;
+
+            // 1. 如果是音频数据 (ArrayBuffer)
+            if (data instanceof ArrayBuffer) {
+                console.log("收到音频数据:", data.byteLength);
+                if (!audioContext) initAudio(); // 确保音频引擎启动
+                try {
+                    const audioBuffer = await audioContext.decodeAudioData(data);
+                    playAudioChunk(audioBuffer);
+                } catch (e) {
+                    console.error("音频解码失败:", e);
+                }
+            } 
+            // 2. 如果是文本字幕 (JSON)
+            else {
+                try {
+                    const msg = JSON.parse(data);
+                    if (msg.type === "text") appendMessage("AI", msg.content);
+                } catch (e) { console.log("非JSON消息:", data); }
+            }
         };
 
-        ws.onmessage = function(event) {
-            const text = event.data;
-            
-            // 核心逻辑：获取聊天框里最后一个气泡
-            const lastMsg = chatBox.lastElementChild;
-
-            // 如果最后一个气泡是 AI 的，并且我们认为它还在说话，就追加文字
-            if (lastMsg && lastMsg.dataset.sender === "AI" && isAiTyping) {
+        function appendMessage(sender, text) {
+            let lastMsg = chatBox.lastElementChild;
+            if (sender === "AI" && lastMsg && lastMsg.dataset.sender === "AI") {
                 lastMsg.innerText += text;
             } else {
-                // 否则，创建一个新气泡
-                addMessage("AI", text, "received");
-                isAiTyping = true; // 标记 AI 开始说话了
+                const div = document.createElement("div");
+                div.className = `msg ${sender === "我" ? "sent" : "received"}`;
+                div.dataset.sender = sender;
+                div.innerText = text;
+                chatBox.appendChild(div);
             }
-            
-            // 滚动到底部
             chatBox.scrollTop = chatBox.scrollHeight;
-        };
-
-        ws.onclose = function() {
-            statusDiv.innerHTML = "🔴 连接断开";
-            statusDiv.style.color = "red";
-        };
+        }
 
         function sendMessage() {
+            initAudio(); // 用户点击时激活音频上下文
             const input = document.getElementById("msgInput");
-            const text = input.value;
-            if (text) {
-                // 发送前，标记 AI 还没开始说话（或者是上一轮对话已结束）
-                isAiTyping = false; 
-                
-                ws.send(text);
-                addMessage("我", text, "sent");
+            if (input.value) {
+                ws.send(input.value);
+                appendMessage("我", input.value);
                 input.value = "";
             }
         }
 
-        function addMessage(sender, text, type) {
-            const div = document.createElement("div");
-            div.className = `msg ${type}`;
-            div.innerText = sender === "AI" || sender === "我" ? text : `${sender}: ${text}`;
-            
-            // 给 DOM 元素加个标记，方便我们识别是谁发的
-            div.dataset.sender = sender; 
-            
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
+        // 音频队列播放系统
+        function initAudio() {
+            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioContext.state === 'suspended') audioContext.resume();
         }
-        
-        function handleKeyPress(e) {
-            if (e.key === 'Enter') sendMessage();
+
+        function playAudioChunk(buffer) {
+            audioQueue.push(buffer);
+            if (!isPlaying) playNext();
         }
+
+        function playNext() {
+            if (audioQueue.length === 0) { isPlaying = false; return; }
+            isPlaying = true;
+            const source = audioContext.createBufferSource();
+            source.buffer = audioQueue.shift();
+            source.connect(audioContext.destination);
+            source.start(0);
+            source.onended = playNext;
+        }
+
+        function handleKeyPress(e) { if (e.key === 'Enter') sendMessage(); }
     </script>
 </body>
 </html>
