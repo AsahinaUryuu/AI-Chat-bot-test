@@ -8,7 +8,7 @@ import uvicorn
 import google.generativeai as genai
 
 # === 🔑 配置区域 ===
-GEMINI_KEY = "AIzaSyDBPw1jISJQpb2ptKaQuObBDkCEZjHCGxE" 
+GEMINI_KEY = "XXXX" 
 TTS_API_URL = "http://127.0.0.1:9880" 
 
 # 模型和参考音频路径 (保持你之前的配置)
